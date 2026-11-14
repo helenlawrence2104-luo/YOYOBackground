@@ -1,0 +1,43 @@
+name: Publish verified v0.5 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-release.yml'
+      - 'releases/**'
+      - 'docs/RELEASE-v0.5.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-v0.5
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Fetch committed artifacts, verify checksum, and publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in releases/YOYOBackground-v0.5.apk releases/SHA256SUMS.txt docs/RELEASE-v0.5.md; do
+            gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${GITHUB_SHA}" --jq '.content' | base64 --decode > "$(basename "$path")"
+          done
+          sha256sum --check SHA256SUMS.txt
+          if gh release view v0.5 >/dev/null 2>&1; then
+            echo 'Release v0.5 already exists; no existing asset is overwritten.'
+            exit 0
+          fi
+          gh release create v0.5 YOYOBackground-v0.5.apk SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title 'YOYOBackground v0.5 — 后台执行与锁屏微信测试版' \
+            --notes-file RELEASE-v0.5.md \
+            --prerelease
